@@ -43,6 +43,7 @@ target_link_libraries(pendulum_core INTERFACE Eigen3_headers)
 if(EMSCRIPTEN)
     add_executable(pendulum_wasm src/api/wasm.cpp)
     target_link_libraries(pendulum_wasm PRIVATE pendulum_core)
+    target_compile_options(pendulum_wasm PRIVATE -fwasm-exceptions)
     target_link_options(pendulum_wasm PRIVATE
         -sEXPORTED_FUNCTIONS=['_engine_create','_engine_destroy','_engine_advance','_engine_time','_engine_energy','_engine_energy_drift','_engine_initial_energy','_engine_get_n','_engine_get_state','_engine_get_positions','_malloc','_free']
         -sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','getValue','setValue']
@@ -50,6 +51,7 @@ if(EMSCRIPTEN)
         -sMODULARIZE=1
         -sEXPORT_NAME='PendulumModule'
         -sENVIRONMENT='web'
+        -fwasm-exceptions
         -O3
     )
     set_target_properties(pendulum_wasm PROPERTIES

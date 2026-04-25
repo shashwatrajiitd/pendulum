@@ -1,6 +1,6 @@
 # Pendulum Physics Engine
 
-A high-precision physics engine for N-pendulum systems (N = 1, 2, 3) with real-time browser visualization. The engine achieves energy drift below 1e-10 over 60 seconds of simulation — six orders of magnitude better than the 1e-5 design target.
+A high-precision physics engine for N-pendulum systems (N = 1, 2, 3) with real-time browser visualization. Run up to 3 independent pendulum systems simultaneously from the same pivot, each with separate parameters and initial conditions. The engine achieves energy drift below 1e-9 over 60 seconds of simulation — four orders of magnitude better than the 1e-5 design target.
 
 ## Screenshots
 
@@ -22,15 +22,23 @@ A chaotic double pendulum released from large angles. The motion trail shows the
 
 A triple pendulum with three phase-space plots showing the fully chaotic dynamics. All three links exhibit aperiodic, space-filling trajectories.
 
+### Multi-System Mode (up to 3 systems)
+
+![Multi-System Pendulums](docs/screenshots/multi_pendulum.png)
+
+Three independent pendulum systems (two double pendulums and one double pendulum with different ICs) running simultaneously from the same pivot at 61 FPS. Each system has its own color-coded trail, energy line, and per-system info panel. Phase-space plots show the selected system.
+
 ## Features
 
 - **N = 1, 2, 3 pendulums** — serial chain with configurable rod lengths, masses, bob radii
+- **Multi-system mode** — up to 3 independent pendulum systems sharing one pivot, each with separate parameters
 - **Lagrangian mechanics** — manipulator-form EOM: M(theta) theta_ddot + C(theta, theta_dot) theta_dot + G(theta) = 0
-- **Adaptive integration** — Dormand-Prince 5(4) with PI step-size control (atol = rtol = 1e-10)
-- **Energy conservation** — |dE/E_0| < 1e-10 over 60 seconds for chaotic double/triple pendulums
+- **Adaptive integration** — Dormand-Prince 5(4) with PI step-size control (atol = rtol = 1e-8 for WASM, 1e-10 for tests)
+- **Energy conservation** — |dE/E_0| < 1e-9 over 60 seconds for chaotic double/triple pendulums
+- **Speed control** — 1/8x to 8x simulation speed with real-time slider
 - **47 validated tests** — period vs elliptic integral, energy conservation, time-reversal symmetry, zero-gravity invariants
-- **WASM powered** — C++20 core compiled to WebAssembly (~285 KB), runs at 60 FPS in the browser
-- **Real-time visualization** — Canvas2D pendulum renderer with motion trails, energy drift plot, and phase-space diagrams
+- **WASM powered** — C++20 core compiled to WebAssembly (~306 KB), runs at 60 FPS in the browser
+- **Real-time visualization** — Canvas2D pendulum renderer with color-coded motion trails, overlaid energy drift plot, and phase-space diagrams
 
 ## Quick Start
 
@@ -42,7 +50,7 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173 in your browser. Select N (1/2/3), set initial angles, and click Play.
+Open http://localhost:5173 in your browser. Configure systems (up to 3), set N, initial angles, and click Play. Use the speed slider to slow down or speed up the simulation.
 
 ### Run the test suite
 
@@ -79,22 +87,24 @@ Emscripten WASM API (extern "C" functions)
 TypeScript Bridge (PendulumEngine class)
     |
     v
-React + Canvas2D Frontend
-    |-- PendulumCanvas: rods, bobs, motion trail
-    |-- EnergyPlot: E(t) - E_0 over time
-    |-- PhaseSpacePlot: theta_i vs theta_dot_i
-    |-- Controls: N, link params, ICs, gravity, play/pause
-    |-- InfoPanel: t, E, |dE/E_0|, theta, FPS
+React + Canvas2D Frontend (multi-system)
+    |-- PendulumCanvas: all systems rendered from shared pivot
+    |-- EnergyPlot: overlaid E(t) - E_0 per system
+    |-- PhaseSpacePlot: theta_i vs theta_dot_i (selected system)
+    |-- Controls: add/remove systems, per-system N/params/ICs, speed
+    |-- InfoPanel: per-system t, E, |dE/E_0|, FPS
 ```
 
 ## Precision
 
 | Metric | Target | Achieved |
 |--------|--------|----------|
-| Energy drift \|dE/E_0\| over 60 s | < 1e-5 | ~1e-10 |
+| Energy drift \|dE/E_0\| over 60 s (native, tol=1e-10) | < 1e-5 | ~1e-10 |
+| Energy drift \|dE/E_0\| over 60 s (WASM, tol=1e-8) | < 1e-5 | ~1e-9 |
 | Period accuracy vs elliptic integral (N=1) | < 1e-5 | < 1e-8 |
 | Time-reversal error over 10 s round-trip | < 1e-5 | < 1e-8 |
 | Zero-gravity velocity drift | < 1e-12 | < 1e-12 |
+| Browser frame rate (3 systems, N=2 each) | 60 FPS | 60 FPS |
 
 ## Documentation
 

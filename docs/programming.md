@@ -51,17 +51,15 @@ pendulum/
 │   ├── index.html
 │   ├── public/wasm/
 │   │   ├── pendulum.js            # Emscripten JS loader
-│   │   └── pendulum.wasm          # Compiled physics engine (~285 KB)
+│   │   └── pendulum.wasm          # Compiled physics engine (~306 KB)
 │   └── src/
-│       ├── App.tsx                 # Main app — wires engine + UI
+│       ├── App.tsx                 # Main app — multi-system engine mgmt + imperative canvas drawing
+│       ├── main.tsx                # React entry point
 │       ├── engine/
-│       │   └── wasm-bridge.ts     # TypeScript WASM bridge
+│       │   └── wasm-bridge.ts     # TypeScript WASM bridge (pre-allocated buffers)
 │       └── components/
-│           ├── PendulumCanvas.tsx  # Canvas2D pendulum renderer
-│           ├── Controls.tsx       # Parameter and playback controls
-│           ├── InfoPanel.tsx      # Live state readout
-│           ├── EnergyPlot.tsx     # E(t) - E_0 chart
-│           └── PhaseSpacePlot.tsx # Phase-space (theta vs theta_dot)
+│           ├── Controls.tsx       # Multi-system controls with add/remove, speed slider
+│           └── InfoPanel.tsx      # Per-system live state readout
 │
 └── docs/
     ├── physics.md                 # Mathematical formulation
@@ -136,6 +134,8 @@ Key methods:
 - `step(t, y, h)` — attempt one step of size h, returns result with error estimate
 - `suggest_h(h, err, prev_err)` — PI controller recommends next step size
 
+The Engine constructor accepts configurable tolerances (`atol`, `rtol`, default 1e-10). The WASM build uses 1e-8 for better frame rate while native tests retain 1e-10 for maximum precision.
+
 The Engine's `advance(dt)` method drives the integrator in a loop, accepting or rejecting steps until the target time is reached.
 
 ## 4. WASM Bindings
@@ -179,6 +179,7 @@ The WASM build uses these Emscripten flags:
 - `MODULARIZE=1` + `EXPORT_NAME='PendulumModule'` — creates a factory function, not a global
 - `ALLOW_MEMORY_GROWTH=1` — dynamic memory
 - `ENVIRONMENT='web'` — browser-only target
+- `-fwasm-exceptions` — native WASM exception support (near-zero overhead on non-throwing path)
 - `-O3` — full optimization
 - Exported runtime methods: `setValue`, `getValue` for safe memory access
 
@@ -188,37 +189,40 @@ The `PendulumEngine` class in `wasm-bridge.ts` wraps the C API:
 
 - Loads the WASM module once (cached via static property — no re-downloads on reset)
 - Marshals parameters to/from WASM memory using `setValue`/`getValue` (not raw HEAPF64, for Emscripten compatibility)
-- Allocates temporary buffers with `_malloc`, copies data, then `_free`s them
+- Pre-allocates reusable WASM memory buffers at engine creation (no malloc/free per frame)
 - Provides a clean TypeScript API: `advance(dt)`, `getState()`, `destroy()`
 
 ## 6. React Frontend
 
-### 6.1 Component Architecture
+### 6.1 Multi-System Architecture
+
+The app manages up to 3 independent pendulum systems (`PendulumSystem[]`), each with its own WASM engine instance, trail buffer, energy history, and phase-space data.
 
 ```
-App
-├── Controls          # N selector, link params, ICs, play/pause/reset
-├── PendulumCanvas    # Canvas2D: rods, bobs, motion trail
-├── InfoPanel         # Live readout: t, E, |dE/E0|, theta, FPS
-├── EnergyPlot        # Canvas2D chart: E(t) - E0 over time
-└── PhaseSpacePlot    # Canvas2D chart: theta_i vs theta_dot_i (one per link)
+App (multi-system orchestrator)
+├── Controls          # Per-system config (add/remove, N, links, ICs), speed slider, play/pause
+├── PendulumCanvas    # Canvas2D: all systems drawn from shared pivot (imperative)
+├── EnergyPlot        # Canvas2D: overlaid E(t) - E0 per system (imperative)
+├── PhaseSpacePlot    # Canvas2D: theta_i vs theta_dot_i for selected system (imperative)
+└── InfoPanel         # Per-system readout: t, E, |dE/E0|, FPS
 ```
 
-### 6.2 Simulation Loop
+### 6.2 Imperative Rendering Loop
 
-The app uses `requestAnimationFrame` for the render loop:
+Canvas drawing bypasses React's render cycle for 60 FPS performance:
 
-1. Each frame calls `engine.advance(1/60)` — the integrator handles its own substepping
-2. `engine.getState()` reads theta, theta_dot, positions, energy
-3. React state updates trigger canvas redraws
-4. Trail history (last 800 points), energy history (last 600), and phase-space history (last 600) are maintained in refs for performance
+1. Each frame calls `engine.advance(speed/60)` for every system — the integrator handles substepping
+2. `engine.getState()` reads state via pre-allocated WASM memory buffers (no malloc/free per frame)
+3. Drawing functions write directly to canvas refs — no React state updates for visualization
+4. Energy/phase plots only redraw every 3rd frame; React InfoPanel state updates every 6th frame
+5. Trail history (last 800 points), energy history (last 600), and phase-space history (last 600) per system are maintained in refs
 
 ### 6.3 Parameter Changes
 
-Changing N, link parameters, initial conditions, or gravity triggers an automatic engine reset:
-- The `resetEngine` callback depends on `[N, links, g, theta0, thetaDot0]`
-- A `useEffect` watching `resetEngine` re-creates the WASM engine whenever parameters change
-- This destroys the old engine, clears all plot history, and starts fresh
+Changing any system's parameters, gravity, or the number of systems triggers a full reset:
+- The `resetEngines` callback depends on `[systems, g]`
+- A `useEffect` watching `resetEngines` re-creates all WASM engines whenever parameters change
+- This destroys old engines, clears all per-system data, and starts fresh
 
 ## 7. Build Instructions
 
@@ -261,9 +265,10 @@ npm run build      # production build to web/dist/
 | `-std=c++20` | Language standard |
 | `-fno-fast-math` | Prevent FP reordering that breaks determinism |
 | `-ffp-contract=off` | Prevent fused multiply-add that changes rounding |
+| `-fwasm-exceptions` | Native WASM exception support (WASM build only) |
 | `-O3` | Full optimization (WASM build) |
 
-These flags ensure IEEE-754 compliant arithmetic, which is critical for reproducible energy conservation results.
+These flags ensure IEEE-754 compliant arithmetic, which is critical for reproducible energy conservation results. Native WASM exceptions provide near-zero overhead on the non-throwing path, unlike the JavaScript-based exception mechanism (`-sDISABLE_EXCEPTION_CATCHING=0`) which wraps every function call in try/catch.
 
 ## 9. Dependencies
 

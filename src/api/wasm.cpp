@@ -20,8 +20,9 @@ struct EngineBase {
 template <int N>
 struct EngineWrapper : EngineBase {
     Engine<N> engine;
-    EngineWrapper(const SystemConfig& cfg, const State<N>& ic)
-        : engine(cfg, ic) {}
+    EngineWrapper(const SystemConfig& cfg, const State<N>& ic,
+                  double atol = 1e-10, double rtol = 1e-10)
+        : engine(cfg, ic, atol, rtol) {}
 
     void advance(double dt) override { engine.advance(dt); }
     double time() const override { return engine.state().t; }
@@ -60,25 +61,27 @@ EngineBase* engine_create(int N, const double* params,
     auto cfg = parse_config(N, params);
     cfg.validate();
 
+    constexpr double atol = 1e-8, rtol = 1e-8;
+
     if (N == 1) {
         State<1> ic;
         ic.theta[0] = theta0[0];
         ic.theta_dot[0] = theta_dot0[0];
-        return new EngineWrapper<1>(cfg, ic);
+        return new EngineWrapper<1>(cfg, ic, atol, rtol);
     } else if (N == 2) {
         State<2> ic;
         for (int i = 0; i < 2; ++i) {
             ic.theta[i] = theta0[i];
             ic.theta_dot[i] = theta_dot0[i];
         }
-        return new EngineWrapper<2>(cfg, ic);
+        return new EngineWrapper<2>(cfg, ic, atol, rtol);
     } else {
         State<3> ic;
         for (int i = 0; i < 3; ++i) {
             ic.theta[i] = theta0[i];
             ic.theta_dot[i] = theta_dot0[i];
         }
-        return new EngineWrapper<3>(cfg, ic);
+        return new EngineWrapper<3>(cfg, ic, atol, rtol);
     }
 }
 

@@ -53,6 +53,12 @@ export class PendulumEngine {
   private _theta0: number[];
   private _thetaDot0: number[];
 
+  // Pre-allocated WASM buffers for getState (avoid malloc/free per frame)
+  private _thetaBuf = 0;
+  private _thetaDotBuf = 0;
+  private _posBuf = 0;
+  private _lengthsBuf = 0;
+
   constructor(
     links: LinkConfig[],
     theta0: number[],
@@ -127,6 +133,14 @@ export class PendulumEngine {
     this.wasm._free(paramsPtr);
     this.wasm._free(thetaPtr);
     this.wasm._free(thetaDotPtr);
+
+    // Pre-allocate reusable buffers for getState
+    this._thetaBuf = this.wasm._malloc(N * 8);
+    this._thetaDotBuf = this.wasm._malloc(N * 8);
+    this._posBuf = this.wasm._malloc(N * 2 * 8);
+    this._lengthsBuf = this.wasm._malloc(N * 8);
+    for (let i = 0; i < N; i++)
+      this.setF64(this._lengthsBuf, i, this._links[i].L);
   }
 
   advance(dt: number): void {
@@ -146,31 +160,23 @@ export class PendulumEngine {
       };
 
     const N = this._N;
-    const thetaPtr = this.wasm._malloc(N * 8);
-    const thetaDotPtr = this.wasm._malloc(N * 8);
-    const posPtr = this.wasm._malloc(N * 2 * 8);
-    const lengthsPtr = this.wasm._malloc(N * 8);
-
-    for (let i = 0; i < N; i++)
-      this.setF64(lengthsPtr, i, this._links[i].L);
-
-    this.wasm._engine_get_state(this.handle, thetaPtr, thetaDotPtr);
-    this.wasm._engine_get_positions(this.handle, posPtr, lengthsPtr);
+    this.wasm._engine_get_state(this.handle, this._thetaBuf, this._thetaDotBuf);
+    this.wasm._engine_get_positions(this.handle, this._posBuf, this._lengthsBuf);
 
     const theta: number[] = [];
     const theta_dot: number[] = [];
     const positions: { x: number; y: number }[] = [];
 
     for (let i = 0; i < N; i++) {
-      theta.push(this.getF64(thetaPtr, i));
-      theta_dot.push(this.getF64(thetaDotPtr, i));
+      theta.push(this.getF64(this._thetaBuf, i));
+      theta_dot.push(this.getF64(this._thetaDotBuf, i));
       positions.push({
-        x: this.getF64(posPtr, 2 * i),
-        y: this.getF64(posPtr, 2 * i + 1),
+        x: this.getF64(this._posBuf, 2 * i),
+        y: this.getF64(this._posBuf, 2 * i + 1),
       });
     }
 
-    const state: PendulumState = {
+    return {
       theta,
       theta_dot,
       t: this.wasm._engine_time(this.handle),
@@ -178,19 +184,19 @@ export class PendulumEngine {
       energy_drift: this.wasm._engine_energy_drift(this.handle),
       positions,
     };
-
-    this.wasm._free(thetaPtr);
-    this.wasm._free(thetaDotPtr);
-    this.wasm._free(posPtr);
-    this.wasm._free(lengthsPtr);
-
-    return state;
   }
 
   destroy(): void {
-    if (this.wasm && this.handle) {
-      this.wasm._engine_destroy(this.handle);
-      this.handle = 0;
+    if (this.wasm) {
+      if (this._thetaBuf) this.wasm._free(this._thetaBuf);
+      if (this._thetaDotBuf) this.wasm._free(this._thetaDotBuf);
+      if (this._posBuf) this.wasm._free(this._posBuf);
+      if (this._lengthsBuf) this.wasm._free(this._lengthsBuf);
+      this._thetaBuf = this._thetaDotBuf = this._posBuf = this._lengthsBuf = 0;
+      if (this.handle) {
+        this.wasm._engine_destroy(this.handle);
+        this.handle = 0;
+      }
     }
   }
 

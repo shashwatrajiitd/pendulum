@@ -13,13 +13,14 @@ class Engine {
     using Vec = Eigen::Matrix<double, Dim, 1>;
 
 public:
-    Engine(const SystemConfig& cfg, const State<N>& ic)
+    Engine(const SystemConfig& cfg, const State<N>& ic,
+           double atol = 1e-10, double rtol = 1e-10)
         : config_(cfg),
           state_(ic),
           coeffs_(compute_coefficients<N>(cfg)),
           E0_(compute_total_energy<N>(coeffs_, cfg.g,
                                        ic.theta, ic.theta_dot)),
-          integrator_(make_rhs(), 1e-10, 1e-10) {
+          integrator_(make_rhs(), atol, rtol) {
         config_.validate();
     }
 

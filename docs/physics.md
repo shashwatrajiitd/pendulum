@@ -202,13 +202,15 @@ The error norm uses mixed absolute/relative tolerances:
 err = sqrt( (1/dim) sum_k (e_k / (atol + rtol * max(|y_k|, |y_new_k|)))^2 )
 ```
 
-Default tolerances: atol = rtol = 1e-10.
+Tolerances are configurable per engine instance:
+- **Native tests**: atol = rtol = 1e-10 (maximum precision, energy drift ~1e-10)
+- **WASM browser**: atol = rtol = 1e-8 (optimized for 60 FPS, energy drift ~1e-9)
 
 Steps are rejected when err > 1 and retried with the reduced step size.
 
 ### 8.3 Why This Approach
 
-Double and triple pendulums are **chaotic** for moderate energies (positive Lyapunov exponent). Trajectories diverge exponentially even with exact arithmetic. What *can* be preserved is the **energy invariant** E = T + V. The precision target |Delta E / E_0| < 1e-5 over 60 seconds is achievable with DOPRI5(4) at tight tolerances (1e-10), which empirically yields drift of ~1e-10 — six orders of magnitude better than required.
+Double and triple pendulums are **chaotic** for moderate energies (positive Lyapunov exponent). Trajectories diverge exponentially even with exact arithmetic. What *can* be preserved is the **energy invariant** E = T + V. The precision target |Delta E / E_0| < 1e-5 over 60 seconds is achievable with DOPRI5(4) at tight tolerances. Native builds use 1e-10 (yielding drift ~1e-10), while the WASM browser build uses 1e-8 (yielding drift ~1e-9) to maintain 60 FPS with up to 3 simultaneous pendulum systems.
 
 ### 8.4 Numerical Hygiene
 

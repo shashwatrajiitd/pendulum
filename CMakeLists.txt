@@ -40,5 +40,23 @@ add_library(pendulum_core INTERFACE)
 target_include_directories(pendulum_core INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(pendulum_core INTERFACE Eigen3_headers)
 
-enable_testing()
-add_subdirectory(tests)
+if(EMSCRIPTEN)
+    add_executable(pendulum_wasm src/api/wasm.cpp)
+    target_link_libraries(pendulum_wasm PRIVATE pendulum_core)
+    target_link_options(pendulum_wasm PRIVATE
+        -sEXPORTED_FUNCTIONS=['_engine_create','_engine_destroy','_engine_advance','_engine_time','_engine_energy','_engine_energy_drift','_engine_initial_energy','_engine_get_n','_engine_get_state','_engine_get_positions','_malloc','_free']
+        -sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','getValue','setValue']
+        -sALLOW_MEMORY_GROWTH=1
+        -sMODULARIZE=1
+        -sEXPORT_NAME='PendulumModule'
+        -sENVIRONMENT='web'
+        -O3
+    )
+    set_target_properties(pendulum_wasm PROPERTIES
+        OUTPUT_NAME "pendulum"
+        SUFFIX ".js"
+    )
+else()
+    enable_testing()
+    add_subdirectory(tests)
+endif()

@@ -7,3 +7,5 @@ compile_commands.json
 *.so
 *.dylib
 .DS_Store
+web/node_modules/
+web/dist/

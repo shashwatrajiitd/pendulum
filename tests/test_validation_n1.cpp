@@ -3,12 +3,10 @@
 #include <catch2/catch_approx.hpp>
 #include "engine.hpp"
 #include <cmath>
-#include <vector>
 
 using namespace pendulum;
 using Catch::Matchers::WithinAbs;
 
-// Complete elliptic integral K(k) via arithmetic-geometric mean
 static double complete_elliptic_K(double k) {
     if (k >= 1.0)
         return std::numeric_limits<double>::infinity();
@@ -22,9 +20,13 @@ static double complete_elliptic_K(double k) {
 }
 
 static double exact_period_n1(const LinkParams& lk, double g, double theta0) {
-    auto c = compute_coeffs_n1(lk);
+    SystemConfig cfg;
+    cfg.N = 1;
+    cfg.links[0] = lk;
+    auto c = compute_coefficients<1>(cfg);
     double k = std::sin(theta0 / 2.0);
-    return 4.0 * std::sqrt(c.beta / (c.gamma * g)) * complete_elliptic_K(k);
+    return 4.0 * std::sqrt(c.beta[0] / (c.gamma_coeff[0] * g))
+           * complete_elliptic_K(k);
 }
 
 // --- Validation 1: Period vs elliptic integral ---

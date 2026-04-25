@@ -21,6 +21,14 @@ add_executable(test_engine_n1 test_engine_n1.cpp)
 target_link_libraries(test_engine_n1 PRIVATE pendulum_core Catch2::Catch2WithMain)
 catch_discover_tests(test_engine_n1)
 
+add_executable(test_engine_n2 test_engine_n2.cpp)
+target_link_libraries(test_engine_n2 PRIVATE pendulum_core Catch2::Catch2WithMain)
+catch_discover_tests(test_engine_n2)
+
+add_executable(test_engine_n3 test_engine_n3.cpp)
+target_link_libraries(test_engine_n3 PRIVATE pendulum_core Catch2::Catch2WithMain)
+catch_discover_tests(test_engine_n3)
+
 add_executable(test_validation_n1 test_validation_n1.cpp)
 target_link_libraries(test_validation_n1 PRIVATE pendulum_core Catch2::Catch2WithMain)
 catch_discover_tests(test_validation_n1)

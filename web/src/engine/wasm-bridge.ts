@@ -66,16 +66,29 @@ export class PendulumEngine {
     this._thetaDot0 = thetaDot0;
   }
 
-  async init(): Promise<void> {
-    const script = document.createElement("script");
-    script.src = "/wasm/pendulum.js";
-    document.head.appendChild(script);
+  private static wasmModule: PendulumWasm | null = null;
+  private static wasmLoading: Promise<PendulumWasm> | null = null;
 
-    await new Promise<void>((resolve) => {
-      script.onload = () => resolve();
+  private static loadWasm(): Promise<PendulumWasm> {
+    if (PendulumEngine.wasmModule)
+      return Promise.resolve(PendulumEngine.wasmModule);
+    if (PendulumEngine.wasmLoading) return PendulumEngine.wasmLoading;
+
+    PendulumEngine.wasmLoading = new Promise<PendulumWasm>((resolve) => {
+      const script = document.createElement("script");
+      script.src = "/wasm/pendulum.js";
+      script.onload = async () => {
+        const mod = await (window as any).PendulumModule();
+        PendulumEngine.wasmModule = mod;
+        resolve(mod);
+      };
+      document.head.appendChild(script);
     });
+    return PendulumEngine.wasmLoading;
+  }
 
-    this.wasm = await (window as any).PendulumModule();
+  async init(): Promise<void> {
+    this.wasm = await PendulumEngine.loadWasm();
     this.createEngine();
   }
 

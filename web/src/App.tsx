@@ -43,12 +43,16 @@ function App() {
   const phaseRef = useRef<{ theta: number; thetaDot: number }[][]>([[], [], []]);
   const e0Ref = useRef(0);
   const fpsCounter = useRef({ frames: 0, lastTime: performance.now() });
+  const resetCounter = useRef(0);
 
   const [trail, setTrail] = useState<{ x: number; y: number }[]>([]);
   const [energyData, setEnergyData] = useState<{ t: number; dE: number }[]>([]);
   const [phaseData, setPhaseData] = useState<{ theta: number; thetaDot: number }[][]>([[]]);
 
   const resetEngine = useCallback(async () => {
+    cancelAnimationFrame(animRef.current);
+    setPlaying(false);
+
     if (engineRef.current) {
       engineRef.current.destroy();
       engineRef.current = null;
@@ -60,7 +64,6 @@ function App() {
     setTrail([]);
     setEnergyData([]);
     setPhaseData([[], [], []]);
-    setPlaying(false);
 
     const engine = new PendulumEngine(
       links.slice(0, N),
@@ -84,9 +87,10 @@ function App() {
   useEffect(() => {
     resetEngine();
     return () => {
+      cancelAnimationFrame(animRef.current);
       if (engineRef.current) engineRef.current.destroy();
     };
-  }, []);
+  }, [resetEngine]);
 
   const stepOnce = useCallback(() => {
     const engine = engineRef.current;
@@ -96,7 +100,6 @@ function App() {
     const s = engine.getState();
     setState(s);
 
-    // Trail (last bob)
     if (s.positions.length > 0) {
       const last = s.positions[s.positions.length - 1];
       trailRef.current.push(last);
@@ -104,12 +107,10 @@ function App() {
       setTrail([...trailRef.current]);
     }
 
-    // Energy plot
     energyRef.current.push({ t: s.t, dE: s.energy - e0Ref.current });
     if (energyRef.current.length > ENERGY_MAX) energyRef.current.shift();
     setEnergyData([...energyRef.current]);
 
-    // Phase space
     for (let i = 0; i < s.theta.length; i++) {
       phaseRef.current[i].push({ theta: s.theta[i], thetaDot: s.theta_dot[i] });
       if (phaseRef.current[i].length > PHASE_MAX) phaseRef.current[i].shift();
@@ -149,6 +150,15 @@ function App() {
     );
   }
 
+  const activeLinks = links.slice(0, N);
+  const activePositions = state.positions.slice(0, N);
+  const activeState: PendulumState = {
+    ...state,
+    theta: state.theta.slice(0, N),
+    theta_dot: state.theta_dot.slice(0, N),
+    positions: activePositions,
+  };
+
   return (
     <div style={{ display: "flex", fontFamily: "system-ui", height: "100vh", overflow: "hidden" }}>
       <Controls
@@ -163,9 +173,9 @@ function App() {
 
       <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8, padding: 16, overflow: "auto" }}>
         <div style={{ display: "flex", gap: 16 }}>
-          <PendulumCanvas state={state} links={links.slice(0, N)} trail={trail} width={500} height={400} />
+          <PendulumCanvas state={activeState} links={activeLinks} trail={trail} width={500} height={400} />
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <InfoPanel state={state} fps={fps} />
+            <InfoPanel state={activeState} fps={fps} />
             <EnergyPlot data={energyData} width={340} height={160} />
           </div>
         </div>

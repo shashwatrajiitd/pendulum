@@ -1,7 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { PendulumEngine, type LinkConfig, type PendulumState } from "./engine/wasm-bridge";
 import { Controls, type PendulumSystem } from "./components/Controls";
-import { InfoPanel } from "./components/InfoPanel";
 
 const DEFAULT_SYSTEMS: PendulumSystem[] = [
   {
@@ -24,6 +23,20 @@ const EMPTY_STATE: PendulumState = {
 const TRAIL_MAX = 800;
 const ENERGY_MAX = 600;
 const PHASE_MAX = 600;
+const MOBILE_BREAKPOINT = 768;
+
+function useTheme() {
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    if (typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches)
+      return "dark";
+    return "light";
+  });
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+  }, [theme]);
+  const toggle = useCallback(() => setTheme(t => t === "light" ? "dark" : "light"), []);
+  return { theme, toggle };
+}
 
 const SYSTEM_COLORS = ["#e74c3c", "#3498db", "#2ecc71"];
 const SYSTEM_TRAIL_COLORS = [
@@ -37,10 +50,6 @@ const SYSTEM_BOB_COLORS = [
   ["#2ecc71", "#27ae60", "#229954"],
 ];
 
-const PEND_W = 500, PEND_H = 400;
-const ENERGY_W = 340, ENERGY_H = 160;
-const PHASE_W = 280, PHASE_H = 200;
-
 interface PerSystemData {
   trail: { x: number; y: number }[];
   energy: { t: number; dE: number }[];
@@ -48,11 +57,22 @@ interface PerSystemData {
   e0: number;
 }
 
+function useWindowWidth() {
+  const [width, setWidth] = useState(window.innerWidth);
+  useEffect(() => {
+    const onResize = () => setWidth(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  return width;
+}
+
 function drawPendulumCanvas(
   canvas: HTMLCanvasElement,
   states: PendulumState[],
   allLinks: LinkConfig[][],
   trails: { x: number; y: number }[][],
+  dark = false,
 ) {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
@@ -84,7 +104,7 @@ function drawPendulumCanvas(
     }
   }
 
-  ctx.fillStyle = "#333";
+  ctx.fillStyle = dark ? "#aaa" : "#333";
   ctx.beginPath();
   ctx.arc(ox, oy, 4, 0, 2 * Math.PI);
   ctx.fill();
@@ -98,7 +118,7 @@ function drawPendulumCanvas(
       const bx = ox + state.positions[i].x * scale;
       const by = oy - state.positions[i].y * scale;
       ctx.beginPath();
-      ctx.strokeStyle = SYSTEM_COLORS[si] + "88";
+      ctx.strokeStyle = SYSTEM_COLORS[si] + (dark ? "aa" : "88");
       ctx.lineWidth = 2.5;
       ctx.moveTo(prevX, prevY);
       ctx.lineTo(bx, by);
@@ -108,7 +128,7 @@ function drawPendulumCanvas(
       ctx.fillStyle = colors[i];
       ctx.arc(bx, by, bobR, 0, 2 * Math.PI);
       ctx.fill();
-      ctx.strokeStyle = "#333";
+      ctx.strokeStyle = dark ? "#555" : "#333";
       ctx.lineWidth = 1;
       ctx.stroke();
       prevX = bx; prevY = by;
@@ -119,6 +139,7 @@ function drawPendulumCanvas(
 function drawEnergyCanvas(
   canvas: HTMLCanvasElement,
   allData: { t: number; dE: number }[][],
+  dark = false,
 ) {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
@@ -143,14 +164,14 @@ function drawEnergyCanvas(
 
   ctx.save();
   ctx.translate(margin.left, margin.top);
-  ctx.strokeStyle = "#ccc";
+  ctx.strokeStyle = dark ? "#3a3a5a" : "#ccc";
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(0, 0); ctx.lineTo(0, ch); ctx.lineTo(cw, ch);
   ctx.stroke();
 
   const y0 = ch / 2;
-  ctx.strokeStyle = "#ddd";
+  ctx.strokeStyle = dark ? "#2a2a4a" : "#ddd";
   ctx.setLineDash([4, 4]);
   ctx.beginPath();
   ctx.moveTo(0, y0); ctx.lineTo(cw, y0);
@@ -172,7 +193,7 @@ function drawEnergyCanvas(
   }
   ctx.restore();
 
-  ctx.fillStyle = "#666";
+  ctx.fillStyle = dark ? "#8888aa" : "#666";
   ctx.font = "11px monospace";
   ctx.fillText("E(t) - E₀", margin.left + 4, margin.top - 6);
   ctx.fillText(`t = ${tMax.toFixed(1)}s`, w - margin.right - 60, h - 6);
@@ -184,6 +205,7 @@ function drawPhaseCanvas(
   data: { theta: number; thetaDot: number }[],
   linkIdx: number,
   color: string,
+  dark = false,
 ) {
   const ctx = canvas.getContext("2d");
   if (!ctx || data.length < 2) return;
@@ -205,7 +227,7 @@ function drawPhaseCanvas(
   const dRange = Math.max(dMax - dMin, 0.01) * 1.1;
   const tMid = (tMax + tMin) / 2, dMid = (dMax + dMin) / 2;
 
-  ctx.strokeStyle = "#ccc";
+  ctx.strokeStyle = dark ? "#3a3a5a" : "#ccc";
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(margin.left, margin.top);
@@ -233,7 +255,7 @@ function drawPhaseCanvas(
   ctx.arc(lx, ly, 4, 0, 2 * Math.PI);
   ctx.fill();
 
-  ctx.fillStyle = "#666";
+  ctx.fillStyle = dark ? "#8888aa" : "#666";
   ctx.font = "11px monospace";
   ctx.fillText(`θ${linkIdx + 1} vs θ̇${linkIdx + 1}`, margin.left + 4, margin.top - 6);
 }
@@ -247,6 +269,18 @@ function App() {
   const [displayStates, setDisplayStates] = useState<PendulumState[]>([EMPTY_STATE]);
   const [loading, setLoading] = useState(true);
   const [fps, setFps] = useState(0);
+  const { theme, toggle: toggleTheme } = useTheme();
+  const dark = theme === "dark";
+
+  const windowWidth = useWindowWidth();
+  const mobile = windowWidth < MOBILE_BREAKPOINT;
+
+  const pendW = mobile ? Math.min(windowWidth - 24, 400) : 500;
+  const pendH = mobile ? Math.round(pendW * 0.8) : 400;
+  const energyW = mobile ? pendW : 340;
+  const energyH = mobile ? 120 : 160;
+  const phaseW = mobile ? Math.floor((pendW - 8) / 2) : 280;
+  const phaseH = mobile ? Math.round(phaseW * 0.7) : 200;
 
   const enginesRef = useRef<PendulumEngine[]>([]);
   const animRef = useRef(0);
@@ -260,9 +294,11 @@ function App() {
   const systemsRef = useRef(systems);
   const speedRef = useRef(speed);
   const selectedRef = useRef(selectedSystem);
+  const darkRef = useRef(dark);
   systemsRef.current = systems;
   speedRef.current = speed;
   selectedRef.current = selectedSystem;
+  darkRef.current = dark;
 
   const drawAll = useCallback((states: PendulumState[], drawPlots = true) => {
     const syss = systemsRef.current;
@@ -275,11 +311,12 @@ function App() {
     }));
     const trails = dataRef.current.map(d => d.trail);
 
+    const dk = darkRef.current;
     if (pendCanvasRef.current)
-      drawPendulumCanvas(pendCanvasRef.current, activeStates, allLinks, trails);
+      drawPendulumCanvas(pendCanvasRef.current, activeStates, allLinks, trails, dk);
     if (!drawPlots) return;
     if (energyCanvasRef.current)
-      drawEnergyCanvas(energyCanvasRef.current, dataRef.current.map(d => d.energy));
+      drawEnergyCanvas(energyCanvasRef.current, dataRef.current.map(d => d.energy), dk);
 
     const si = selectedRef.current;
     if (si < syss.length) {
@@ -287,7 +324,7 @@ function App() {
       const color = SYSTEM_COLORS[si];
       for (let i = 0; i < N; i++) {
         const c = phaseCanvasRefs.current[i];
-        if (c) drawPhaseCanvas(c, dataRef.current[si]?.phase[i] || [], i, color);
+        if (c) drawPhaseCanvas(c, dataRef.current[si]?.phase[i] || [], i, color, dk);
       }
     }
   }, []);
@@ -414,10 +451,108 @@ function App() {
   }
 
   const selSys = systems[selectedSystem] || systems[0];
-  const selState = displayStates[selectedSystem] || EMPTY_STATE;
 
+  const canvasBg = dark ? "#16213e" : "#fafafa";
+  const panelBg = dark ? "#1a1a2e" : "#f9f9f9";
+  const borderColor = dark ? "#2a2a4a" : "#eee";
+  const mutedColor = dark ? "#8888aa" : "#888";
+
+  // --- Mobile layout ---
+  if (mobile) {
+    return (
+      <div style={{ fontFamily: "system-ui", height: "100vh", display: "flex", flexDirection: "column", background: "var(--bg)", color: "var(--fg)" }}>
+        {/* Fixed top: playback + pendulum */}
+        <div style={{ flexShrink: 0 }}>
+          <div style={{
+            display: "flex", gap: 6, padding: "8px 12px", borderBottom: `1px solid ${borderColor}`,
+            alignItems: "center", background: "var(--bg)",
+          }}>
+            <button onClick={() => setPlaying(p => !p)}
+              style={{ flex: 1, padding: "10px 0", fontSize: 16, cursor: "pointer" }}>
+              {playing ? "⏸ Pause" : "▶ Play"}
+            </button>
+            <button onClick={stepOnce} style={{ padding: "10px 14px", cursor: "pointer" }}>Step</button>
+            <button onClick={resetEngines} style={{ padding: "10px 14px", cursor: "pointer" }}>Reset</button>
+            <button onClick={toggleTheme} style={{ padding: "10px 14px", cursor: "pointer" }}>
+              {dark ? "☀" : "☾"}
+            </button>
+          </div>
+          <div style={{ padding: "4px 12px" }}>
+            <canvas ref={pendCanvasRef} width={pendW} height={pendH}
+              style={{ background: canvasBg, borderRadius: 8, width: "100%" }} />
+          </div>
+        </div>
+
+        {/* Scrollable: info, speed, graphs, parameters */}
+        <div style={{ flex: 1, overflow: "auto", WebkitOverflowScrolling: "touch" }}>
+          {/* Info row */}
+          <div style={{ display: "flex", gap: 4, padding: "6px 12px", flexWrap: "wrap" }}>
+            {displayStates.map((s, i) => (
+              <div key={i} style={{
+                flex: 1, minWidth: 100, padding: 6, background: panelBg, borderRadius: 4,
+                fontFamily: "monospace", fontSize: 10, lineHeight: 1.3,
+                borderLeft: `3px solid ${SYSTEM_COLORS[i]}`,
+              }}>
+                <div><strong>S{i + 1}</strong> t={s.t.toFixed(1)}s</div>
+                <div>|dE/E₀|={s.energy_drift.toExponential(1)}</div>
+              </div>
+            ))}
+            <div style={{ padding: 6, fontFamily: "monospace", fontSize: 10 }}>FPS={fps}</div>
+          </div>
+
+          {/* Speed */}
+          <div style={{ padding: "2px 12px", fontSize: 12 }}>
+            Speed: {speed >= 1 ? speed + "x" : "1/" + (1 / speed) + "x"}
+            <input type="range" min="-3" max="3" step="1"
+              value={Math.round(Math.log2(speed))}
+              onChange={(e) => setSpeed(Math.pow(2, +e.target.value))}
+              style={{ width: "100%", margin: "4px 0" }} />
+          </div>
+
+          {/* Energy plot */}
+          <div style={{ padding: "4px 12px" }}>
+            <canvas ref={energyCanvasRef} width={energyW} height={energyH}
+              style={{ background: canvasBg, borderRadius: 6, width: "100%" }} />
+          </div>
+
+          {/* Phase space */}
+          <div style={{ padding: "4px 12px" }}>
+            <div style={{ fontSize: 11, color: mutedColor, marginBottom: 4 }}>
+              Phase space (System {selectedSystem + 1})
+            </div>
+            <div style={{ display: "flex", gap: 4 }}>
+              {Array.from({ length: selSys.N }, (_, i) => (
+                <canvas key={`${selectedSystem}-${i}`}
+                  ref={(el) => { phaseCanvasRefs.current[i] = el; }}
+                  width={phaseW} height={phaseH}
+                  style={{ background: canvasBg, borderRadius: 4, flex: 1 }} />
+              ))}
+            </div>
+          </div>
+
+          {/* Parameters inline */}
+          <div style={{ padding: "8px 12px" }}>
+            <Controls
+              systems={systems} g={g} playing={playing} speed={speed}
+              selectedSystem={selectedSystem}
+              onSystemsChange={setSystems} onGChange={setG}
+              onPlayPause={() => setPlaying(p => !p)}
+              onReset={resetEngines} onStep={stepOnce}
+              onSpeedChange={setSpeed}
+              onSelectedSystemChange={setSelectedSystem}
+              hidePlayback
+            />
+          </div>
+
+          <div style={{ height: 40 }} />
+        </div>
+      </div>
+    );
+  }
+
+  // --- Desktop layout ---
   return (
-    <div style={{ display: "flex", fontFamily: "system-ui", height: "100vh", overflow: "hidden" }}>
+    <div style={{ display: "flex", fontFamily: "system-ui", height: "100vh", overflow: "hidden", background: "var(--bg)", color: "var(--fg)" }}>
       <Controls
         systems={systems} g={g} playing={playing} speed={speed}
         selectedSystem={selectedSystem}
@@ -430,13 +565,13 @@ function App() {
 
       <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8, padding: 16, overflow: "auto" }}>
         <div style={{ display: "flex", gap: 16 }}>
-          <canvas ref={pendCanvasRef} width={PEND_W} height={PEND_H}
-            style={{ background: "#fafafa", borderRadius: 8 }} />
+          <canvas ref={pendCanvasRef} width={pendW} height={pendH}
+            style={{ background: canvasBg, borderRadius: 8 }} />
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               {displayStates.map((s, i) => (
                 <div key={i} style={{
-                  padding: 8, background: "#f9f9f9", borderRadius: 6,
+                  padding: 8, background: panelBg, borderRadius: 6,
                   fontFamily: "monospace", fontSize: 11, lineHeight: 1.4,
                   borderLeft: `3px solid ${SYSTEM_COLORS[i]}`,
                   opacity: i === selectedSystem ? 1 : 0.7,
@@ -444,24 +579,28 @@ function App() {
                   <div><strong>S{i + 1}</strong> t={s.t.toFixed(2)}s E={s.energy.toFixed(4)}J |dE/E0|={s.energy_drift.toExponential(2)}</div>
                 </div>
               ))}
-              <div style={{ padding: 4, fontFamily: "monospace", fontSize: 12 }}>
-                <strong>FPS</strong> = {fps}
+              <div style={{ padding: 4, fontFamily: "monospace", fontSize: 12, display: "flex", alignItems: "center", gap: 8 }}>
+                <span><strong>FPS</strong> = {fps}</span>
+                <button onClick={toggleTheme}
+                  style={{ marginLeft: "auto", padding: "2px 8px", cursor: "pointer", fontSize: 14 }}>
+                  {dark ? "☀" : "☾"}
+                </button>
               </div>
             </div>
-            <canvas ref={energyCanvasRef} width={ENERGY_W} height={ENERGY_H}
-              style={{ background: "#fafafa", borderRadius: 6 }} />
+            <canvas ref={energyCanvasRef} width={energyW} height={energyH}
+              style={{ background: canvasBg, borderRadius: 6 }} />
           </div>
         </div>
 
-        <div style={{ fontSize: 12, color: "#888", marginTop: 4 }}>
+        <div style={{ fontSize: 12, color: mutedColor, marginTop: 4 }}>
           Phase space (System {selectedSystem + 1})
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {Array.from({ length: selSys.N }, (_, i) => (
             <canvas key={`${selectedSystem}-${i}`}
               ref={(el) => { phaseCanvasRefs.current[i] = el; }}
-              width={PHASE_W} height={PHASE_H}
-              style={{ background: "#fafafa", borderRadius: 6 }} />
+              width={phaseW} height={phaseH}
+              style={{ background: canvasBg, borderRadius: 6 }} />
           ))}
         </div>
       </div>

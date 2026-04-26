@@ -20,6 +20,7 @@ interface Props {
   onStep: () => void;
   onSpeedChange: (s: number) => void;
   onSelectedSystemChange: (i: number) => void;
+  hidePlayback?: boolean;
 }
 
 const SYSTEM_COLORS = ["#e74c3c", "#3498db", "#2ecc71"];
@@ -36,40 +37,40 @@ function LinkEditor({
   onThetaDotChange: (v: number) => void;
 }) {
   return (
-    <div style={{ marginBottom: 8, padding: 6, background: "#f0f0f0", borderRadius: 4 }}>
-      <strong style={{ fontSize: 12 }}>Link {idx + 1}</strong>
+    <div style={{ marginBottom: 8, padding: 6, background: "var(--bg4)", borderRadius: 4 }}>
+      <strong style={{ fontSize: 12, color: "var(--fg)" }}>Link {idx + 1}</strong>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 3, marginTop: 3 }}>
-        <label style={{ fontSize: 12 }}>
+        <label style={{ fontSize: 12, color: "var(--fg)" }}>
           L
           <input type="number" step="0.1" min="0.1" value={link.L}
             onChange={(e) => onChange({ ...link, L: +e.target.value })}
             style={{ width: 50, marginLeft: 4 }} />
         </label>
-        <label style={{ fontSize: 12 }}>
+        <label style={{ fontSize: 12, color: "var(--fg)" }}>
           m_bob
           <input type="number" step="0.1" min="0.01" value={link.m_bob}
             onChange={(e) => onChange({ ...link, m_bob: +e.target.value })}
             style={{ width: 50, marginLeft: 4 }} />
         </label>
-        <label style={{ fontSize: 12 }}>
+        <label style={{ fontSize: 12, color: "var(--fg)" }}>
           m_rod
           <input type="number" step="0.1" min="0" value={link.m_rod}
             onChange={(e) => onChange({ ...link, m_rod: +e.target.value })}
             style={{ width: 50, marginLeft: 4 }} />
         </label>
-        <label style={{ fontSize: 12 }}>
+        <label style={{ fontSize: 12, color: "var(--fg)" }}>
           r_bob
           <input type="number" step="0.01" min="0" value={link.r_bob}
             onChange={(e) => onChange({ ...link, r_bob: +e.target.value })}
             style={{ width: 50, marginLeft: 4 }} />
         </label>
-        <label style={{ fontSize: 12 }}>
+        <label style={{ fontSize: 12, color: "var(--fg)" }}>
           &theta;&#8320;
           <input type="number" step="0.1" value={theta}
             onChange={(e) => onThetaChange(+e.target.value)}
             style={{ width: 50, marginLeft: 4 }} />
         </label>
-        <label style={{ fontSize: 12 }}>
+        <label style={{ fontSize: 12, color: "var(--fg)" }}>
           &theta;&#775;&#8320;
           <input type="number" step="0.1" value={thetaDot}
             onChange={(e) => onThetaDotChange(+e.target.value)}
@@ -97,15 +98,15 @@ function SystemEditor({
         onClick={(e) => { e.preventDefault(); onSelect(); }}
         style={{
           cursor: "pointer", padding: "6px 8px", borderRadius: 6,
-          background: selected ? color + "22" : "#f9f9f9",
+          background: selected ? color + "22" : "var(--bg2)",
           borderLeft: `4px solid ${color}`,
           display: "flex", justifyContent: "space-between", alignItems: "center",
-          fontSize: 13, fontWeight: 600,
+          fontSize: 13, fontWeight: 600, color: "var(--fg)",
         }}
       >
         <span>System {sysIdx + 1}</span>
         <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <span style={{ fontSize: 11, fontWeight: 400, color: "#888" }}>
+          <span style={{ fontSize: 11, fontWeight: 400, color: "var(--muted)" }}>
             N={system.N}
           </span>
           {onRemove && (
@@ -118,7 +119,7 @@ function SystemEditor({
       </summary>
       {selected && (
         <div style={{ padding: "8px 0 0 0" }}>
-          <label style={{ display: "block", marginBottom: 8, fontSize: 12 }}>
+          <label style={{ display: "block", marginBottom: 8, fontSize: 12, color: "var(--fg)" }}>
             Chain length (N):{" "}
             <select value={system.N} onChange={(e) => onChange({ ...system, N: +e.target.value })}>
               <option value={1}>1</option>
@@ -184,8 +185,14 @@ export function Controls(props: Props) {
   };
 
   return (
-    <div style={{ padding: 12, width: 280, overflowY: "auto", borderRight: "1px solid #eee" }}>
-      <h3 style={{ margin: "0 0 8px", fontSize: 15 }}>Parameters</h3>
+    <div style={{
+      padding: 12,
+      width: props.hidePlayback ? "100%" : 280,
+      overflowY: "auto",
+      borderRight: props.hidePlayback ? "none" : "1px solid var(--border)",
+      color: "var(--fg)",
+    }}>
+      {!props.hidePlayback && <h3 style={{ margin: "0 0 8px", fontSize: 15 }}>Parameters</h3>}
 
       <label style={{ display: "block", marginBottom: 10, fontSize: 13 }}>
         g:{" "}
@@ -207,7 +214,11 @@ export function Controls(props: Props) {
 
       {props.systems.length < 3 && (
         <button onClick={addSystem}
-          style={{ width: "100%", padding: "6px 0", marginBottom: 8, cursor: "pointer", fontSize: 13, border: "1px dashed #ccc", background: "none", borderRadius: 6 }}>
+          style={{
+            width: "100%", padding: "6px 0", marginBottom: 8, cursor: "pointer",
+            fontSize: 13, border: "1px dashed var(--border2)", background: "none",
+            borderRadius: 6, color: "var(--fg)",
+          }}>
           + Add System
         </button>
       )}
@@ -217,19 +228,21 @@ export function Controls(props: Props) {
         <input type="range" min="-3" max="3" step="1" value={Math.round(Math.log2(props.speed))}
           onChange={(e) => props.onSpeedChange(Math.pow(2, +e.target.value))}
           style={{ width: "100%", marginTop: 4 }} />
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#999" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--muted2)" }}>
           <span>1/8x</span><span>1x</span><span>8x</span>
         </div>
       </label>
 
-      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-        <button onClick={props.onPlayPause}
-          style={{ flex: 1, padding: "8px 0", fontSize: 15, cursor: "pointer" }}>
-          {props.playing ? "⏸ Pause" : "▶ Play"}
-        </button>
-        <button onClick={props.onStep} style={{ padding: "8px 12px", cursor: "pointer" }}>Step</button>
-        <button onClick={props.onReset} style={{ padding: "8px 12px", cursor: "pointer" }}>Reset</button>
-      </div>
+      {!props.hidePlayback && (
+        <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+          <button onClick={props.onPlayPause}
+            style={{ flex: 1, padding: "8px 0", fontSize: 15, cursor: "pointer" }}>
+            {props.playing ? "⏸ Pause" : "▶ Play"}
+          </button>
+          <button onClick={props.onStep} style={{ padding: "8px 12px", cursor: "pointer" }}>Step</button>
+          <button onClick={props.onReset} style={{ padding: "8px 12px", cursor: "pointer" }}>Reset</button>
+        </div>
+      )}
     </div>
   );
 }
